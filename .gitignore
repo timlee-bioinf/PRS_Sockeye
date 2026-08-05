@@ -1,0 +1,65 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rproj
+
+# R package/cache artifacts
+renv/library/
+renv/staging/
+packrat/lib*/
+packrat/src/
+
+# Slurm logs
+logs/
+*.out
+*.err
+
+# Pipeline outputs
+results/
+score_files/
+pca/
+run_output/
+
+# PLINK output and temporary files
+*.log
+*.nosex
+*.sscore
+*.eigenvec
+*.eigenval
+*.prune.in
+*.prune.out
+*.pgen~
+*.pvar~
+*.psam~
+
+# Large or local input data
+COPA_SNP_impute/
+GWAS/
+COPA_Pheno.xlsx
+
+# Spreadsheet temp files
+~$*.xlsx
+~$*.xls
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local submit wrappers (contain personal paths / allocation — never commit)
+submit.local.sh
+*.local.sh
+
+# Skill eval workspace (transient)
+.skilltest/
+.claude/
