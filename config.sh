@@ -26,9 +26,12 @@ R2_THRESH="${R2_THRESH:-0}"        # 0 = keep all; e.g. 0.8 to filter at scoring
 
 # --- output ---
 RUN_BASE="${RUN_BASE:-$PROJECT_ROOT/run_output}"
+# Auto-prune SNP_extract_* run directories older than this many days on each
+# new submit.sh invocation. 0 disables pruning.
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 
 if [[ "${DEBUG_CONFIG:-0}" == "1" ]]; then
-  for v in PROJECT_ROOT DATA_ROOT SNP_INPUT IMPUTE_DIR PLINK2 SCORE_MODE R2_THRESH RUN_BASE; do
+  for v in PROJECT_ROOT DATA_ROOT SNP_INPUT IMPUTE_DIR PLINK2 SCORE_MODE R2_THRESH RUN_BASE RETENTION_DAYS; do
     echo "[CONFIG] $v=${!v}"
   done
 fi

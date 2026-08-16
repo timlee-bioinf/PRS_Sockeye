@@ -15,6 +15,13 @@ INPUTS="$BASE_OUT/inputs"
 LOG_DIR="$BASE_OUT/logs"
 mkdir -p "$INPUTS" "$LOG_DIR"
 
+# Prune old run directories (RETENTION_DAYS=0 disables). Only touches this
+# run's siblings under RUN_BASE, never the one just created above.
+if [[ "${RETENTION_DAYS:-0}" -gt 0 ]]; then
+  find "$RUN_BASE" -maxdepth 1 -mindepth 1 -type d -name 'SNP_extract_*' \
+    -mtime "+${RETENTION_DAYS}" -exec rm -rf -- {} +
+fi
+
 # Duplicate guard: refuse if a pipeline run is already queued/running.
 JOB_RE='^(grs_extract|grs_merge|grs_score)$'
 if squeue -u "$USER" -h -o "%j %T" 2>/dev/null \

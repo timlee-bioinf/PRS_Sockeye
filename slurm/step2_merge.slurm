@@ -43,3 +43,7 @@ echo "[INFO] merging $N chromosome pgen(s)" | tee -a "$STEP_LOG"
 
 MERGED=$(grep -vc '^#' "$TASK2_OUT/all_snps.pvar")
 echo "[DONE] merged -> $TASK2_OUT/all_snps ($MERGED variants)" | tee -a "$STEP_LOG"
+
+# Per-chromosome files are now superseded by the merged pfile (not used by any
+# later step) - remove them so 22 intermediate genotype files don't pile up per run.
+rm -f "$TASK1_OUT"/chr*.{pgen,pvar,psam,log}
