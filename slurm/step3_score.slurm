@@ -48,13 +48,17 @@ fi
 
 # no-mean-imputation: small cohort (<50) blocks PLINK's auto allele-frequency
 # imputation; imputed dosages have ~no missingness, so score observed alleles only.
+# keep (4th arg, optional): --keep file restricting to one ancestry's samples.
 run_score() {
-  local sfile="$1" out="$2" label="$3"
+  local sfile="$1" out="$2" label="$3" keep="${4:-}"
   [[ -f "$sfile" ]] || { echo "[ERROR] missing score file: $sfile"; exit 1; }
+  local KEEP_OPT=()
+  [[ -n "$keep" ]] && KEEP_OPT=(--keep "$keep")
   echo "[INFO] scoring: $label" | tee -a "$STEP_LOG"
   "$PLINK2" \
     --pfile "$PFILE" \
     "${EXTRACT_OPT[@]+"${EXTRACT_OPT[@]}"}" \
+    "${KEEP_OPT[@]+"${KEEP_OPT[@]}"}" \
     --score "$sfile" 1 2 3 header cols=+scoresums no-mean-imputation \
     --out "$out" >> "$STEP_LOG" 2>&1
 }
@@ -66,8 +70,41 @@ case "$SCORE_MODE" in
   *) echo "[ERROR] invalid SCORE_MODE: $SCORE_MODE (both|weighted|unweighted)"; exit 1 ;;
 esac
 
-[[ "$DO_U" -eq 1 ]] && run_score "$INPUTS/copa_unweighted_score.tsv" "$TASK3_OUT/grs_unweighted" "unweighted"
-[[ "$DO_W" -eq 1 ]] && run_score "$INPUTS/copa_weighted_score.tsv"   "$TASK3_OUT/grs_weighted"   "weighted"
+if [[ "$RUN_ANCESTRY" == "1" ]]; then
+  # Ancestry-routed scoring: each sample is scored only with the weight
+  # file(s) matching the population step2b_ancestry.slurm assigned it.
+  TASK2B_OUT="$BASE_OUT/task2b_ancestry"
+  [[ -f "$ANCESTRY_MAP" ]] || { echo "[ERROR] ANCESTRY_MAP not found: $ANCESTRY_MAP"; exit 1; }
+  ANCESTRY_LIST=$(awk -F'\t' '!/^#/ && NF{print $1}' "$ANCESTRY_MAP" | paste -sd, -)
+
+  while IFS=$'\t' read -r ANC SNP_IN; do
+    [[ -z "$ANC" || "$ANC" == \#* ]] && continue
+    KEEP_FILE="$TASK2B_OUT/keep_${ANC}.txt"
+    if [[ ! -s "$KEEP_FILE" ]]; then
+      echo "[INFO] ancestry=$ANC: 0 samples assigned - skip scoring" | tee -a "$STEP_LOG"
+      continue
+    fi
+    ANC_INPUTS="$INPUTS/ancestry/$ANC"
+    ANC_OUT="$TASK3_OUT/$ANC"; mkdir -p "$ANC_OUT"
+    [[ "$DO_U" -eq 1 ]] && run_score "$ANC_INPUTS/copa_unweighted_score.tsv" "$ANC_OUT/grs_unweighted" "unweighted/$ANC" "$KEEP_FILE"
+    [[ "$DO_W" -eq 1 ]] && run_score "$ANC_INPUTS/copa_weighted_score.tsv"   "$ANC_OUT/grs_weighted"   "weighted/$ANC"   "$KEEP_FILE"
+  done < <(tr -d '\r' < "$ANCESTRY_MAP"; printf '\n')
+
+  module load gcc/9.4.0 r/4.4.0 2>/dev/null || true
+  SUBMIT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  echo "[INFO] combining ancestry-adjusted scores" | tee -a "$STEP_LOG"
+  Rscript "$SUBMIT_DIR/scripts/adjust_ancestry_scores.R" \
+    --calls "$TASK2B_OUT/ancestry_calls.tsv" \
+    --ancestries "$ANCESTRY_LIST" \
+    --score-mode "$SCORE_MODE" \
+    --score-dir "$TASK3_OUT" \
+    --norm-models-dir "$ANCESTRY_REF_CACHE/ancestry" \
+    --out "$TASK3_OUT/grs_combined.tsv" >> "$STEP_LOG" 2>&1
+  echo "[DONE] ancestry-adjusted combined scores: $TASK3_OUT/grs_combined.tsv" | tee -a "$STEP_LOG"
+else
+  [[ "$DO_U" -eq 1 ]] && run_score "$INPUTS/copa_unweighted_score.tsv" "$TASK3_OUT/grs_unweighted" "unweighted"
+  [[ "$DO_W" -eq 1 ]] && run_score "$INPUTS/copa_weighted_score.tsv"   "$TASK3_OUT/grs_weighted"   "weighted"
+fi
 
 echo "[DONE] scores in $TASK3_OUT" | tee -a "$STEP_LOG"
-ls -1 "$TASK3_OUT"/*.sscore 2>/dev/null | tee -a "$STEP_LOG" || true
+find "$TASK3_OUT" -name '*.sscore' -o -name 'grs_combined.tsv' 2>/dev/null | tee -a "$STEP_LOG" || true

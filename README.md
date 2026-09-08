@@ -145,6 +145,128 @@ TOTAL 279      27x    x
 a sample-completeness line (e.g. `samples=31 with_any_missing_genotype=0
 max_F_MISS=0`) confirming whether every sample has these SNPs.
 
+## Multi-ancestry (optional)
+
+Adapts the ancestry-inference idea from
+[pgscatalog/pgsc_calc](https://github.com/pgscatalog/pgsc_calc) into this
+PLINK2/bash/SLURM pipeline, without adopting Nextflow, containers, or its
+Python package. Key difference from pgsc_calc: pgsc_calc scores every sample
+with **one** PGS weight file and only adjusts the result post-hoc; this mode
+instead **routes each sample to its own ancestry-matched SNP/weight list**
+(what you already have), and additionally reports pgsc_calc-style
+normalization columns.
+
+Off by default (`RUN_ANCESTRY=0`) - every file/step above is unchanged unless
+you opt in. Turning it on replaces the single `SNP_INPUT` with a set of
+per-ancestry inputs and adds one pipeline step:
+
+```text
+        prep (per ancestry: build snp_list + score files; union -> step1)
+                          |
+        step1  extract  (unchanged - snp_list.txt is now bigger)
+                          |
+        step2  merge    (unchanged)
+                          |
+              +-----------+-----------+
+              v                       v
+        step2b ancestry          step4  report   (unchanged)
+        (PCA projection +
+         classification)
+              |
+        step3  score
+        (per-ancestry --keep + --score,
+         then empirical + PCA-regression
+         normalization)
+```
+
+### One-time setup (not part of the per-run DAG)
+
+1. A reference ancestry panel in **PLINK2 pgen/pvar/psam** format, with rsIDs
+   in its `.pvar` (matched by rsID, same as everywhere else in this pipeline -
+   no genome-build/liftover requirement) and a population-label column in its
+   `.psam` (e.g. `SuperPop` with values like `EUR`/`EAS`/`SAS`/`AFR`/`AMR`).
+   pgsc_calc's own prebuilt 1000G / HGDP+1kGP reference panels are in exactly
+   this format.
+2. `ANCESTRY_MAP`: a TSV, no header, one ancestry per line:
+   `<ancestry_label><TAB><snp_input path>` - `snp_input` is the same
+   xlsx/csv/tsv format `SNP_INPUT` already accepts. **`ancestry_label` values
+   must exactly match** the values in the reference panel's label column.
+   See `snp_input/ancestry_input.tsv.example`.
+3. Set `RUN_ANCESTRY=1` and the `ANCESTRY_*` variables in `config.sh`/
+   `submit.local.sh` (reference panel path, label column, PC counts - see
+   comments in `config.sh`).
+4. Run `bash scripts/setup_ancestry_reference.sh` once. It LD-prunes the
+   reference panel, computes its PCA, fits a Mahalanobis population
+   classifier, and (per ancestry) scores the reference panel with that
+   ancestry's own weight file to build empirical + PC-regression
+   normalization models. Cached under `ANCESTRY_REF_CACHE` - re-run only when
+   the reference panel, `ANCESTRY_MAP`, or the PC-count settings change.
+
+### New per-run step: `step2b_ancestry.slurm`
+
+Projects this run's samples onto the cached reference PCA (`plink2 --score`
+against the PCA allele-weights, a bare-PLINK2 analog of pgsc_calc's
+FRAPOSA/OADP projection), then classifies each sample's most-similar
+reference population via Mahalanobis distance (mirrors pgsc_calc's
+`--ancestry_method Mahalanobis`) and writes one `--keep` list per ancestry.
+Never rejects a sample - low-confidence calls are flagged (`LowConfidence`
+column), not dropped; decide filtering downstream if you want it.
+
+### `step3_score.slurm` output: `task3_score/grs_combined.tsv`
+
+Per sample, per `SCORE_MODE`:
+- `ancestry_assigned`, `LowConfidence`, `PC1..PCk` - the classification result
+  ("continuous ancestry").
+- `Score_<mode>` - raw score from the sample's own ancestry-matched weight file.
+- `Z_MostSimilarPop_<mode>` / `percentile_MostSimilarPop_<mode>` - empirical
+  Z-score/percentile vs. the reference panel's same-population score
+  distribution ("discrete ancestry" normalization, pgsc_calc-style).
+- `Z_norm1_<mode>` - continuous PCA-regression residual Z-score (score
+  regressed on top PCs within the matched population; Khera et al.
+  2019-style, like pgsc_calc's `Z_norm1`). Fit **per ancestry bucket** here
+  (not across the whole reference panel like pgsc_calc) since different
+  ancestries are scored on different weight-file scales.
+- pgsc_calc's variance-adjusted `Z_norm2` is **not** implemented (scope-cut
+  for a bare-minimum port).
+
+### Caveats - please verify on first run
+
+- **Untested end-to-end**: written without cluster/PLINK2/live-data access,
+  then checked with an independent adversarial code review (bash correctness,
+  R/statistics correctness, cross-file interface consistency) that found and
+  fixed 10 concrete bugs before this was ever run for real - see git history
+  for what changed. Still worth a careful look at `logs/ancestry.log` and
+  `grs_combined.tsv` on your first real run:
+  - The exact column layout `plink2 --pca allele-wts` writes to
+    `.eigenvec.allele` was not verified against a live binary -
+    `step2b_ancestry.slurm` and `classify_ancestry.R` detect columns from the
+    file's own header rather than hardcoding positions, and fail loudly
+    (dumping the header) rather than silently miscomputing if detection
+    fails.
+  - `ANCESTRY_MAP` is parsed defensively (tolerates a missing final newline
+    and Windows CRLF line endings), but if you hand-edit it, double check
+    every ancestry row actually shows up in `$INPUTS/ancestry/<label>/` after
+    prep and in `task3_score/<label>/` after scoring.
+- `ANCESTRY_REF_EXCLUDE` (related/duplicate reference samples to drop, e.g. a
+  `*.king.cutoff.out.id` file) is optional but recommended if your reference
+  panel includes related individuals - they bias the PCA/classifier otherwise.
+  It's applied via `plink2 --remove` (the primary mechanism) to every
+  reference-panel plink2 call; the R scripts also filter by it defensively,
+  but since they read plink2's already-filtered output, that R-side filter
+  is normally a no-op.
+- A sample with no reference population resembling it at all is still
+  assigned to its nearest match (flagged `LowConfidence`), matching pgsc_calc's
+  own default behavior - there's no reject/"unassigned" category.
+- `setup_ancestry_reference.sh` builds normalization models only for the
+  `SCORE_MODE` in effect when you run it. `submit.sh`'s preflight now checks
+  that every ancestry/mode this run needs actually exists in the cache before
+  submitting the DAG - re-run `setup_ancestry_reference.sh` if you add an
+  ancestry or change `SCORE_MODE`.
+- A monomorphic/degenerate weight file for one ancestry (zero variance in the
+  reference panel's scores for that ancestry) makes `setup_ancestry_reference.sh`
+  fail loudly for that ancestry rather than silently emitting `Inf`/`NaN`
+  normalized scores.
+
 ## Notes
 
 - **Coverage**: expect fewer variants than the input list - some SNPs may be
