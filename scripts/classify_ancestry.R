@@ -97,7 +97,7 @@ if (any(low_conf)) message(sprintf("%d sample(s) flagged LowConfidence (max p < 
 unmapped <- setdiff(unique(most_similar), ancestries)
 if (length(unmapped) > 0) {
   message("[WARN] samples were assigned to reference population(s) with no matching entry in ",
-          "ANCESTRY_MAP: ", paste(unmapped, collapse = ", "),
+          "weights file in WEIGHTS_DIR: ", paste(unmapped, collapse = ", "),
           " - those samples have no ancestry-specific score file and will be skipped in step3.")
 }
 

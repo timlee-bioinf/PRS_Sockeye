@@ -74,8 +74,8 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
   # Ancestry-routed scoring: each sample is scored only with the weight
   # file(s) matching the population step2b_ancestry.slurm assigned it.
   TASK2B_OUT="$BASE_OUT/task2b_ancestry"
-  [[ -f "$ANCESTRY_MAP" ]] || { echo "[ERROR] ANCESTRY_MAP not found: $ANCESTRY_MAP"; exit 1; }
-  ANCESTRY_LIST=$(awk -F'\t' '!/^#/ && NF{print $1}' "$ANCESTRY_MAP" | paste -sd, -)
+  ANC_MAP="$(ancestry_map)" || exit 1
+  ANCESTRY_LIST=$(cut -f1 <<< "$ANC_MAP" | paste -sd, -)
 
   while IFS=$'\t' read -r ANC SNP_IN; do
     [[ -z "$ANC" || "$ANC" == \#* ]] && continue
@@ -88,7 +88,7 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
     ANC_OUT="$TASK3_OUT/$ANC"; mkdir -p "$ANC_OUT"
     [[ "$DO_U" -eq 1 ]] && run_score "$ANC_INPUTS/copa_unweighted_score.tsv" "$ANC_OUT/grs_unweighted" "unweighted/$ANC" "$KEEP_FILE"
     [[ "$DO_W" -eq 1 ]] && run_score "$ANC_INPUTS/copa_weighted_score.tsv"   "$ANC_OUT/grs_weighted"   "weighted/$ANC"   "$KEEP_FILE"
-  done < <(tr -d '\r' < "$ANCESTRY_MAP"; printf '\n')
+  done <<< "$ANC_MAP"
 
   module load gcc/9.4.0 r/4.4.0 2>/dev/null || true
   SUBMIT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -98,7 +98,7 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
     --ancestries "$ANCESTRY_LIST" \
     --score-mode "$SCORE_MODE" \
     --score-dir "$TASK3_OUT" \
-    --norm-models-dir "$ANCESTRY_REF_CACHE/ancestry" \
+    --norm-models-dir "$ANCESTRY_NORM_DIR" \
     --out "$TASK3_OUT/grs_combined.tsv" >> "$STEP_LOG" 2>&1
   echo "[DONE] ancestry-adjusted combined scores: $TASK3_OUT/grs_combined.tsv" | tee -a "$STEP_LOG"
 else

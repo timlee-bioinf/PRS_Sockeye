@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Orchestrator: prepare score files (login node), then submit the SLURM DAG
 #   step1 extract (array) -> step2 merge -> step3 score
-# Run via submit.local.sh (which sets your account/paths), or set the env vars
-# yourself and run `bash submit.sh`. No personal info lives in this file.
+# Set your account/paths in config.sh, then run `bash submit.sh`.
 set -euo pipefail
 
 SUBMIT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,23 +30,23 @@ if squeue -u "$USER" -h -o "%j %T" 2>/dev/null \
 fi
 
 # --- prep on the login node: build snp_list + score file(s) before the array ---
-echo "[PREP] preparing inputs (mode=$SCORE_MODE, RUN_ANCESTRY=$RUN_ANCESTRY)"
+echo "[PREP] preparing inputs (trait=$TRAIT, mode=$SCORE_MODE, RUN_ANCESTRY=$RUN_ANCESTRY)"
 module load gcc/9.4.0 r/4.4.0 2>/dev/null || true
 
 if [[ "$RUN_ANCESTRY" == "1" ]]; then
   # Multi-ancestry: build each ancestry's own score files (reusing
-  # prepare_copa_score_files.R unchanged, once per ANCESTRY_MAP row), then
-  # union their SNPs (+ the cached ancestry-PCA marker set) into a single
-  # snp_list.txt / copa_score_variants_qc.tsv so step1_extract.slurm and
-  # step4_report.slurm need no changes at all.
-  [[ -f "$ANCESTRY_MAP" ]] || { echo "[ERROR] ANCESTRY_MAP not found: $ANCESTRY_MAP"; exit 1; }
+  # prepare_copa_score_files.R unchanged, once per weights file in
+  # WEIGHTS_DIR), then union their SNPs (+ the cached ancestry-PCA marker set)
+  # into a single snp_list.txt / copa_score_variants_qc.tsv so
+  # step1_extract.slurm and step4_report.slurm need no changes at all.
+  ANC_MAP="$(ancestry_map)" || exit 1
   [[ -f "$ANCESTRY_REF_CACHE/prune.prune.in" && -f "$ANCESTRY_REF_CACHE/pop_models.rds" \
      && -f "$ANCESTRY_REF_CACHE/ref_pca.eigenvec.allele" && -f "$ANCESTRY_REF_CACHE/ref_pca.afreq" ]] || {
     echo "[ERROR] ancestry reference cache missing/incomplete at $ANCESTRY_REF_CACHE - run scripts/setup_ancestry_reference.sh first"
     exit 1
   }
-  # Cache is built per-mode (see setup_ancestry_reference.sh) and can go stale
-  # if ANCESTRY_MAP gains a row or SCORE_MODE changes without re-running setup -
+  # Cache is built per-trait and per-mode (see setup_ancestry_reference.sh) and
+  # can go stale if WEIGHTS_DIR gains a file or SCORE_MODE changes without re-running setup -
   # check every norm-model file this run will actually need BEFORE submitting
   # the (expensive) DAG, not after step3 has already scored everything.
   case "$SCORE_MODE" in
@@ -60,13 +59,13 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
   while IFS=$'\t' read -r ANC SNP_IN; do
     [[ -z "$ANC" || "$ANC" == \#* ]] && continue
     for MODE in "${CHECK_MODES[@]}"; do
-      [[ -f "$ANCESTRY_REF_CACHE/ancestry/$ANC/norm_models_${MODE}.rds" ]] || {
-        echo "[ERROR] missing $ANCESTRY_REF_CACHE/ancestry/$ANC/norm_models_${MODE}.rds" \
-             "- re-run scripts/setup_ancestry_reference.sh (new ANCESTRY_MAP row, or SCORE_MODE changed, since it was last built?)"
+      [[ -f "$ANCESTRY_NORM_DIR/$ANC/norm_models_${MODE}.rds" ]] || {
+        echo "[ERROR] missing $ANCESTRY_NORM_DIR/$ANC/norm_models_${MODE}.rds" \
+             "- re-run scripts/setup_ancestry_reference.sh (new trait, new weights file, or SCORE_MODE changed, since it was last built?)"
         MISSING_CACHE=1
       }
     done
-  done < <(tr -d '\r' < "$ANCESTRY_MAP"; printf '\n')
+  done <<< "$ANC_MAP"
   [[ "$MISSING_CACHE" -eq 0 ]] || exit 1
 
   : > "$INPUTS/snp_list.txt"
@@ -86,7 +85,7 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
     else
       tail -n +2 "$ANC_OUT/copa_score_variants_qc.tsv" >> "$INPUTS/copa_score_variants_qc.tsv"
     fi
-  done < <(tr -d '\r' < "$ANCESTRY_MAP"; printf '\n')
+  done <<< "$ANC_MAP"
 
   # dedup: a SNP shared by two ancestry lists would otherwise double-count in
   # step4's coverage report (keep header + first occurrence per SNP).
@@ -103,9 +102,8 @@ else
   echo "[PREP] $(wc -l < "$INPUTS/snp_list.txt") SNPs in snp_list.txt"
 fi
 
-# Account is taken from SBATCH_ACCOUNT in the environment (set in submit.local.sh).
-# Optional email notifications: set MAIL_USER (and MAIL_TYPE) in submit.local.sh.
-# Kept here, not in the committed slurm files, so no personal email is committed.
+# Account is taken from SBATCH_ACCOUNT (exported by config.sh when set).
+# Optional email notifications: set MAIL_USER (and MAIL_TYPE) in config.sh.
 MAIL_ARGS=()
 if [[ -n "${MAIL_USER:-}" ]]; then
   MAIL_ARGS=(--mail-user="$MAIL_USER" --mail-type="${MAIL_TYPE:-ALL}")

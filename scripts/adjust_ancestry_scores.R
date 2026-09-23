@@ -22,7 +22,7 @@
 # Usage:
 #   Rscript adjust_ancestry_scores.R --calls ancestry_calls.tsv
 #       --ancestries EUR,EAS,SAS,AFR --score-mode both
-#       --score-dir task3_score/ --norm-models-dir ancestry_ref_cache/ancestry
+#       --score-dir task3_score/ --norm-models-dir ancestry_ref_cache/traits/<TRAIT>
 #       --out task3_score/grs_combined.tsv
 
 suppressPackageStartupMessages(library(dplyr))

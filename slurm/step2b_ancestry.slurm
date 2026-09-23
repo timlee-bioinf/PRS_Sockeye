@@ -42,10 +42,9 @@ POP_MODELS="$ANCESTRY_REF_CACHE/pop_models.rds"
 for f in "$ALLELE_FILE" "$FREQ_FILE" "$PRUNE_LIST" "$POP_MODELS"; do
   [[ -f "$f" ]] || { echo "[ERROR] missing $f - run scripts/setup_ancestry_reference.sh first"; exit 1; }
 done
-[[ -f "$ANCESTRY_MAP" ]] || { echo "[ERROR] ANCESTRY_MAP not found: $ANCESTRY_MAP"; exit 1; }
-
-ANCESTRY_LIST=$(awk -F'\t' '!/^#/ && NF{print $1}' "$ANCESTRY_MAP" | paste -sd, -)
-[[ -n "$ANCESTRY_LIST" ]] || { echo "[ERROR] no ancestries parsed from $ANCESTRY_MAP"; exit 1; }
+ANC_MAP="$(ancestry_map)" || exit 1
+ANCESTRY_LIST=$(cut -f1 <<< "$ANC_MAP" | paste -sd, -)
+[[ -n "$ANCESTRY_LIST" ]] || { echo "[ERROR] no ancestries found in $WEIGHTS_DIR"; exit 1; }
 MIN_PCS=$(( ANCESTRY_N_POPCOMP > ANCESTRY_N_NORM ? ANCESTRY_N_POPCOMP : ANCESTRY_N_NORM ))
 
 # .eigenvec.allele column layout was not verified against a live plink2
