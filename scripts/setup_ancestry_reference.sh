@@ -15,15 +15,15 @@
 # REBUILD_REF=1 to also redo steps 1-3 (reference panel, ANCESTRY_REF_EXCLUDE,
 # or ANCESTRY_N_* settings changed).
 #
-# Usage: bash scripts/setup_ancestry_reference.sh
-#        REBUILD_REF=1 bash scripts/setup_ancestry_reference.sh
+# Usage: ./submit.local.sh setup                  (uses your submit.local.sh settings)
+#        REBUILD_REF=1 ./submit.local.sh setup
 set -euo pipefail
 
 SUBMIT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export CONFIG="${CONFIG:-$SUBMIT_DIR/config.sh}"
 source "$CONFIG"
 
-[[ "$RUN_ANCESTRY" == "1" ]] || { echo "[ERROR] RUN_ANCESTRY=1 required (set it in config.sh)"; exit 1; }
+[[ "$RUN_ANCESTRY" == "1" ]] || { echo "[ERROR] RUN_ANCESTRY=1 required (set it in submit.local.sh)"; exit 1; }
 ANC_MAP="$(ancestry_map)" || exit 1
 [[ -f "${ANCESTRY_REF_PFILE}.pvar" || -f "${ANCESTRY_REF_PFILE}.pvar.zst" ]] || {
   echo "[ERROR] reference panel not found: ${ANCESTRY_REF_PFILE}.pvar[.zst]"; exit 1; }

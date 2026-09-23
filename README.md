@@ -11,7 +11,7 @@ merges them, and scores every sample. Weighting is optional.
 
 `submit.sh` runs a SLURM **DAG** (directed acyclic graph): a set of jobs chained
 by `--dependency=afterok`, so each step starts only after the one(s) it depends
-on finish successfully. One `bash submit.sh` submits the whole thing.
+on finish successfully. One `./submit.local.sh` submits the whole thing.
 
 ```text
         prep (login node: build snp_list + score files)
@@ -43,8 +43,11 @@ not a failure), so it does not block the merge.
 ## Repository layout
 
 ```text
-config.sh                          # EDIT THIS: account, data/weights paths, run dir, options
+config.sh                          # paths/options via ${VAR:-default}; NO personal info
 submit.sh                          # orchestrator: prep + submit the DAG
+submit.local.sh.example            # template for your launcher (copy -> submit.local.sh)
+submit.local.sh                    # git-ignored: your account + real paths; runs submit.sh
+weights/<TRAIT>/<ANC>.tsv          # default WEIGHTS_ROOT (one folder per trait)
 scripts/
   prepare_copa_score_files.R       # SNP input -> snp_list.txt + score file(s)
   analyze_copa_grs.R               # OPTIONAL, standalone association models (not in the DAG)
@@ -66,24 +69,32 @@ slurm/
 
 ## Inputs
 
-Expected layout under `DATA_ROOT` (set in `config.sh`):
+Every path is set independently in `submit.local.sh`, so inputs can stay
+wherever they already live (e.g. read-only shared lab storage). Only the
+outputs need to be writable:
+
+| Variable | Points to | Access | Default |
+|---|---|---|---|
+| `IMPUTE_DIR` | folder with `chr_<N>/chr<N>.dose.vcf.gz` | read | `$DATA_ROOT/imputation` |
+| `WEIGHTS_ROOT` | folder of trait folders, `<TRAIT>/<ANC>.tsv` | read | `<repo>/weights` |
+| `SNP_INPUT` | one weights file (single-ancestry mode) | read | `$WEIGHTS_ROOT/$TRAIT/EUR.tsv` |
+| `ANCESTRY_REF_PFILE` | reference panel `.pgen/.pvar/.psam`, no extension | read | `$DATA_ROOT/ancestry_ref/ref` |
+| `RUN_BASE` | per-run outputs | **write** | `<repo>/run_output/$TRAIT` |
+| `ANCESTRY_REF_CACHE` | setup cache (multi-ancestry) | **write** | `<repo>/ancestry_ref_cache` |
+
+Weights are organized one folder per trait, one file per ancestry:
 
 ```text
-DATA_ROOT/
-├── imputation/                      ← IMPUTE_DIR
-│   └── chr_<N>/chr<N>.dose.vcf.gz   (N = 1..22)
-├── weights/
-│   └── <TRAIT>/                     ← WEIGHTS_DIR (one folder per trait, e.g. copd/)
-│       ├── EUR.tsv                  one weights file per ancestry; the file name
-│       ├── EAS.tsv                  (minus extension) is the ancestry label
-│       ├── AFR.tsv
-│       └── AMR.tsv
-├── ancestry_ref/ref.{pgen,pvar,psam}  ← ANCESTRY_REF_PFILE (multi-ancestry only)
-└── ancestry_ref_cache/                built by setup_ancestry_reference.sh
+WEIGHTS_ROOT/
+└── copd/                 ← TRAIT (WEIGHTS_DIR = $WEIGHTS_ROOT/$TRAIT)
+    ├── EUR.tsv           the file name (minus extension) is the ancestry label
+    ├── EAS.tsv
+    ├── AFR.tsv
+    └── AMR.tsv
 ```
 
 - **Single ancestry** (`RUN_ANCESTRY=0`): `SNP_INPUT` points at **one** weights
-  file (e.g. `$WEIGHTS_DIR/EUR.tsv`), used for every sample.
+  file (e.g. `$WEIGHTS_ROOT/copd/EUR.tsv`), used for every sample.
 - **Multi-ancestry** (`RUN_ANCESTRY=1`): every weights file in `WEIGHTS_DIR`
   is used; `SNP_INPUT` is ignored.
 
@@ -103,17 +114,19 @@ DATA_ROOT/
 
 ## Running
 
-Edit `config.sh` with your values, then run:
+Copy the template once, fill in your values, then run it:
 
 ```bash
-# config.sh sets:
-#   SBATCH_ACCOUNT, MAIL_USER, DATA_ROOT, IMPUTE_DIR, TRAIT, SNP_INPUT, PLINK2,
-#   SCORE_MODE (both|weighted|unweighted), R2_THRESH, RUN_BASE, RUN_ANCESTRY
-bash submit.sh
+cp submit.local.sh.example submit.local.sh && chmod +x submit.local.sh   # first time
+./submit.local.sh check    # print the resolved paths/settings, submit nothing
+./submit.local.sh          # submit the pipeline
+./submit.local.sh setup    # multi-ancestry only: build the reference cache for $TRAIT
 ```
 
-`config.sh` exports `SBATCH_ACCOUNT` (when set) so Slurm charges that
-allocation. Leave it empty to use your cluster default.
+Everything personal (allocation, paths) stays in the git-ignored
+`submit.local.sh`; the committed scripts contain only placeholders. The
+account is passed to Slurm via the `SBATCH_ACCOUNT` environment variable.
+Anything you don't set falls back to the default in `config.sh`.
 
 ### Options
 
@@ -207,15 +220,15 @@ per-ancestry weights file in `WEIGHTS_DIR` and adds one pipeline step:
    `.psam` (e.g. `SuperPop` with values like `EUR`/`EAS`/`SAS`/`AFR`/`AMR`).
    pgsc_calc's own prebuilt 1000G / HGDP+1kGP reference panels are in exactly
    this format.
-2. One weights file per ancestry in `weights/<TRAIT>/`, named by ancestry
+2. One weights file per ancestry in `$WEIGHTS_ROOT/<TRAIT>/`, named by ancestry
    label (`EUR.tsv`, `EAS.tsv`, `AFR.tsv`, `AMR.tsv`, ...). **The file name
    (minus extension) must exactly match** a value in the reference panel's
    label column - e.g. with 1000 Genomes super-populations, Latino/admixed
    American is `AMR`.
 3. Set `RUN_ANCESTRY=1`, `TRAIT`, and the `ANCESTRY_*` variables in
-   `config.sh` (reference panel path, label column, PC counts - see
+   `submit.local.sh` (reference panel path, label column, PC counts - see
    comments in `config.sh`).
-4. Run `bash scripts/setup_ancestry_reference.sh` once per trait. The first
+4. Run `./submit.local.sh setup` once per trait. The first
    time, it LD-prunes the reference panel, computes its PCA and fits a
    Mahalanobis population classifier (shared by all traits, cached in
    `ANCESTRY_REF_CACHE`). Then, per ancestry, it scores the reference panel
@@ -269,7 +282,7 @@ Per sample, per `SCORE_MODE`:
     fails.
   - Ancestries are discovered from the `.xlsx`/`.csv`/`.tsv` files in
     `WEIGHTS_DIR` (other files are ignored). Run
-    `DEBUG_CONFIG=1 bash -c 'source config.sh'` to see which labels were
+    `./submit.local.sh check` to see which labels were
     found, and check each shows up in `$INPUTS/ancestry/<label>/` after prep
     and in `task3_score/<label>/` after scoring.
 - `ANCESTRY_REF_EXCLUDE` (related/duplicate reference samples to drop, e.g. a

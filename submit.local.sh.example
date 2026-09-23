@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Template for your personal launcher. Copy it, fill in your values, run it:
+#   cp submit.local.sh.example submit.local.sh && chmod +x submit.local.sh
+# submit.local.sh is git-ignored, so your account/paths are never committed.
+#
+#   ./submit.local.sh          submit the pipeline (prep + SLURM DAG)
+#   ./submit.local.sh setup    build the ancestry reference cache for $TRAIT
+#                              (multi-ancestry only; once per trait)
+#   ./submit.local.sh check    print the resolved config, submit nothing
+#
+# Anything left unset falls back to the default in config.sh.
+set -euo pipefail
+HERE="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- SLURM ---
+export SBATCH_ACCOUNT="your-allocation"
+# export MAIL_USER="you@example.com"
+
+# --- read-only inputs (shared storage is fine) ---
+export IMPUTE_DIR="/path/to/imputation"            # contains chr_<N>/chr<N>.dose.vcf.gz
+
+# --- weights: $WEIGHTS_ROOT/<TRAIT>/<ANC>.tsv ---
+export TRAIT="copd"
+export WEIGHTS_ROOT="$HERE/weights"                  # anywhere you can write
+export SNP_INPUT="$WEIGHTS_ROOT/$TRAIT/EUR.tsv"      # single-ancestry mode only
+
+# --- options ---
+export SCORE_MODE="both"                             # both | weighted | unweighted
+export R2_THRESH="0"
+
+# --- output (must be writable) ---
+# export RUN_BASE="$HERE/run_output/$TRAIT"
+
+# --- multi-ancestry ---
+export RUN_ANCESTRY="0"                              # 1 = ancestry inference + routed scoring
+export ANCESTRY_REF_PFILE="/path/to/ancestry_ref/ref"   # no extension; read-only is fine
+export ANCESTRY_REF_LABEL_COL="SuperPop"
+# export ANCESTRY_REF_EXCLUDE="/path/to/related.king.cutoff.out.id"
+# export ANCESTRY_REF_CACHE="$HERE/ancestry_ref_cache" # must be writable
+
+case "${1:-submit}" in
+  submit) exec bash "$HERE/submit.sh" ;;
+  setup)  exec bash "$HERE/scripts/setup_ancestry_reference.sh" ;;
+  check)  DEBUG_CONFIG=1 bash -c "source '$HERE/config.sh'" ;;
+  *) echo "usage: $0 [submit|setup|check]"; exit 1 ;;
+esac

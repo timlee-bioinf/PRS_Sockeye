@@ -21,6 +21,7 @@ results/
 score_files/
 pca/
 run_output/
+ancestry_ref_cache/
 
 # PLINK output and temporary files
 *.log

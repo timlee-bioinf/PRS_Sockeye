@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Orchestrator: prepare score files (login node), then submit the SLURM DAG
 #   step1 extract (array) -> step2 merge -> step3 score
-# Set your account/paths in config.sh, then run `bash submit.sh`.
+# Run via submit.local.sh (which sets your account/paths - see
+# submit.local.sh.example), or set the env vars yourself and run `bash submit.sh`.
+# No personal info lives in this file.
 set -euo pipefail
 
 SUBMIT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -102,8 +104,9 @@ else
   echo "[PREP] $(wc -l < "$INPUTS/snp_list.txt") SNPs in snp_list.txt"
 fi
 
-# Account is taken from SBATCH_ACCOUNT (exported by config.sh when set).
-# Optional email notifications: set MAIL_USER (and MAIL_TYPE) in config.sh.
+# Account is taken from SBATCH_ACCOUNT in the environment (set in submit.local.sh).
+# Optional email notifications: set MAIL_USER (and MAIL_TYPE) in submit.local.sh.
+# Kept here, not in the committed slurm files, so no personal email is committed.
 MAIL_ARGS=()
 if [[ -n "${MAIL_USER:-}" ]]; then
   MAIL_ARGS=(--mail-user="$MAIL_USER" --mail-type="${MAIL_TYPE:-ALL}")
