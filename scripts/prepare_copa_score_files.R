@@ -5,8 +5,8 @@
 #   - copa_weighted_score.tsv   : SNP  A1  WEIGHT   (only when mode needs it)
 #   - copa_score_variants_qc.tsv: the parsed/filtered table (QC record)
 #
-# Input may be an .xlsx (e.g. the GWAS weight workbook) or a .csv/.tsv candidate
-# list. Required columns (auto-detected): an rsID/SNP column and a risk/effect
+# Input may be an .xlsx (e.g. the GWAS weight workbook) or a .csv/.tsv/.txt
+# candidate list, optionally gzipped (e.g. a PGS Catalog scoring file). Required columns (auto-detected): an rsID/SNP column and a risk/effect
 # allele column. A weight column is only required for weighted scoring.
 #
 # Usage:
@@ -53,8 +53,13 @@ if (is_xlsx) {
   }
   raw <- read_excel(input, sheet = sheet, skip = skip_n)
 } else {
-  if (is.na(skip_n)) skip_n <- 0
-  raw <- if (grepl("\\.csv$", input, ignore.case = TRUE)) {
+  # Default: skip leading "#" metadata lines (e.g. PGS Catalog scoring-file
+  # headers). file() reads .gz transparently.
+  if (is.na(skip_n)) {
+    head_lines <- readLines(input, n = 1000, warn = FALSE)
+    skip_n <- match(FALSE, startsWith(head_lines, "#"), nomatch = length(head_lines) + 1) - 1
+  }
+  raw <- if (grepl("\\.csv(\\.gz)?$", input, ignore.case = TRUE)) {
     read_csv(input, skip = skip_n, show_col_types = FALSE)
   } else {
     read_tsv(input, skip = skip_n, show_col_types = FALSE)

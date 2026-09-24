@@ -7,6 +7,9 @@
 #   ./submit.local.sh setup    build the ancestry reference cache for $TRAIT
 #                              (multi-ancestry only; once per trait)
 #   ./submit.local.sh check    print the resolved config, submit nothing
+#   ./submit.local.sh rsids    one-time: convert position-only weights files in
+#                              $WEIGHTS_ROOT/$TRAIT/pgs_raw/ into rsID weights
+#                              files (SLURM job; see slurm/resolve_pgs_rsids.slurm)
 #
 # Anything left unset falls back to the default in config.sh.
 set -euo pipefail
@@ -21,7 +24,7 @@ export IMPUTE_DIR="/path/to/imputation"            # contains chr_<N>/chr<N>.dos
 
 # --- weights: $WEIGHTS_ROOT/<TRAIT>/<ANC>.tsv ---
 export TRAIT="copd"
-export WEIGHTS_ROOT="$HERE/weights"                  # anywhere you can write
+export WEIGHTS_ROOT="$HERE/snp_input"                # snp_input/<TRAIT>/<ANC>.tsv
 export SNP_INPUT="$WEIGHTS_ROOT/$TRAIT/EUR.tsv"      # single-ancestry mode only
 
 # --- options ---
@@ -42,5 +45,11 @@ case "${1:-submit}" in
   submit) exec bash "$HERE/submit.sh" ;;
   setup)  exec bash "$HERE/scripts/setup_ancestry_reference.sh" ;;
   check)  DEBUG_CONFIG=1 bash -c "source '$HERE/config.sh'" ;;
-  *) echo "usage: $0 [submit|setup|check]"; exit 1 ;;
+  rsids)
+    RAW="$(bash -c "source '$HERE/config.sh'; echo \"\$WEIGHTS_DIR\"")/pgs_raw"
+    [[ -d "$RAW" ]] || { echo "[ERROR] put the raw weights files in $RAW first"; exit 1; }
+    sbatch --export=ALL,CONFIG="$HERE/config.sh",SUBMIT_DIR="$HERE" \
+      --output="$RAW/resolve_%j.out" --error="$RAW/resolve_%j.err" \
+      "$HERE/slurm/resolve_pgs_rsids.slurm" ;;
+  *) echo "usage: $0 [submit|setup|check|rsids]"; exit 1 ;;
 esac

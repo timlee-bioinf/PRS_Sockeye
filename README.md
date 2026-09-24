@@ -47,7 +47,7 @@ config.sh                          # paths/options via ${VAR:-default}; NO perso
 submit.sh                          # orchestrator: prep + submit the DAG
 submit.local.sh.example            # template for your launcher (copy -> submit.local.sh)
 submit.local.sh                    # git-ignored: your account + real paths; runs submit.sh
-weights/<TRAIT>/<ANC>.tsv          # default WEIGHTS_ROOT (one folder per trait)
+snp_input/<TRAIT>/<ANC>.tsv        # default WEIGHTS_ROOT (one folder per trait)
 scripts/
   prepare_copa_score_files.R       # SNP input -> snp_list.txt + score file(s)
   analyze_copa_grs.R               # OPTIONAL, standalone association models (not in the DAG)
@@ -76,7 +76,7 @@ outputs need to be writable:
 | Variable | Points to | Access | Default |
 |---|---|---|---|
 | `IMPUTE_DIR` | folder with `chr_<N>/chr<N>.dose.vcf.gz` | read | `$DATA_ROOT/imputation` |
-| `WEIGHTS_ROOT` | folder of trait folders, `<TRAIT>/<ANC>.tsv` | read | `<repo>/weights` |
+| `WEIGHTS_ROOT` | folder of trait folders, `<TRAIT>/<ANC>.tsv` | read | `<repo>/snp_input` |
 | `SNP_INPUT` | one weights file (single-ancestry mode) | read | `$WEIGHTS_ROOT/$TRAIT/EUR.tsv` |
 | `ANCESTRY_REF_PFILE` | reference panel `.pgen/.pvar/.psam`, no extension | read | `$DATA_ROOT/ancestry_ref/ref` |
 | `RUN_BASE` | per-run outputs | **write** | `<repo>/run_output/$TRAIT` |
@@ -92,6 +92,31 @@ WEIGHTS_ROOT/
     ├── AFR.tsv
     └── AMR.tsv
 ```
+
+### Weights files without rsIDs (e.g. PGS Catalog)
+
+The pipeline matches variants by rsID. Some published scores (e.g. PGS Catalog
+`*_hmPOS_GRCh38.txt.gz` files with an empty `hm_rsID` column) only give
+positions. Convert them once per trait:
+
+```text
+WEIGHTS_ROOT/<TRAIT>/
+├── pgs_raw/
+│   ├── EUR.txt.gz        ← put the raw files here, renamed by ancestry
+│   └── AFR.txt.gz ...
+├── EUR.tsv               ← written by the conversion (rsID weights)
+└── AFR.tsv ...
+```
+
+```bash
+./submit.local.sh rsids   # submits slurm/resolve_pgs_rsids.slurm
+```
+
+Each variant is looked up by GRCh38 chr + position + alleles in your imputed
+VCFs and takes that record's rsID. Anything not found (or found with ID `.`)
+is dropped and listed with a reason in `pgs_raw/<ANC>.unmatched.tsv`; the
+summary is in `pgs_raw/resolve.log`. Only files directly in `<TRAIT>/` are
+used as weights, so `pgs_raw/` is ignored by the pipeline itself.
 
 - **Single ancestry** (`RUN_ANCESTRY=0`): `SNP_INPUT` points at **one** weights
   file (e.g. `$WEIGHTS_ROOT/copd/EUR.tsv`), used for every sample.

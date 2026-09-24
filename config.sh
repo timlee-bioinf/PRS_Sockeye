@@ -23,9 +23,11 @@ IMPUTE_DIR="${IMPUTE_DIR:-$DATA_ROOT/imputation}"
 
 # --- weights ---
 # One folder per trait under WEIGHTS_ROOT, one weights file per ancestry:
-#   $WEIGHTS_ROOT/<TRAIT>/<ANC>.{tsv,csv,xlsx}   e.g. weights/copd/EUR.tsv
-# Weights files need at least an rsID column and a risk/effect allele column;
-# a weight column is only needed for weighted scoring.
+#   $WEIGHTS_ROOT/<TRAIT>/<ANC>.{tsv,csv,xlsx}   e.g. snp_input/copd/EUR.tsv
+# Weights files: .xlsx, or tab/comma-separated .tsv/.txt/.csv (optionally .gz,
+# e.g. PGS Catalog scoring files - their leading "#" header lines are skipped).
+# They need at least an rsID column and a risk/effect allele column; a weight
+# column is only needed for weighted scoring.
 #   RUN_ANCESTRY=0: SNP_INPUT is the ONE file used for every sample (assumes
 #                   the whole cohort is that ancestry).
 #   RUN_ANCESTRY=1: SNP_INPUT is ignored; every weights file in WEIGHTS_DIR is
@@ -33,7 +35,7 @@ IMPUTE_DIR="${IMPUTE_DIR:-$DATA_ROOT/imputation}"
 #                   label, e.g. EUR.tsv -> EUR. Labels MUST exactly match the
 #                   reference panel's ANCESTRY_REF_LABEL_COL values.
 TRAIT="${TRAIT:-copd}"
-WEIGHTS_ROOT="${WEIGHTS_ROOT:-$PROJECT_ROOT/weights}"
+WEIGHTS_ROOT="${WEIGHTS_ROOT:-$PROJECT_ROOT/snp_input}"
 WEIGHTS_DIR="${WEIGHTS_DIR:-$WEIGHTS_ROOT/$TRAIT}"
 SNP_INPUT="${SNP_INPUT:-$WEIGHTS_DIR/EUR.tsv}"
 
@@ -87,17 +89,19 @@ ANCESTRY_PVAL_THRESH="${ANCESTRY_PVAL_THRESH:-1e-10}"
 # Use as: ANC_MAP="$(ancestry_map)" || exit 1
 ancestry_map() {
   [[ -d "$WEIGHTS_DIR" ]] || { echo "[ERROR] WEIGHTS_DIR not found: $WEIGHTS_DIR" >&2; return 1; }
-  local f base label out="" seen=" "
-  for f in "$WEIGHTS_DIR"/*.xlsx "$WEIGHTS_DIR"/*.csv "$WEIGHTS_DIR"/*.tsv; do
+  local f base label out="" seen=" " ext
+  for ext in xlsx csv tsv txt csv.gz tsv.gz txt.gz; do
+  for f in "$WEIGHTS_DIR"/*."$ext"; do
     [[ -f "$f" ]] || continue
     base="$(basename "$f")"
     [[ "$base" == [~.]* ]] && continue   # skip Excel lock files / hidden files
-    label="${base%.*}"
+    label="${base%.gz}"; label="${label%.*}"   # EUR.txt.gz -> EUR
     [[ "$seen" == *" $label "* ]] && { echo "[ERROR] two weights files for ancestry '$label' in $WEIGHTS_DIR" >&2; return 1; }
     seen+="$label "
     out+="${label}"$'\t'"${f}"$'\n'
   done
-  [[ -n "$out" ]] || { echo "[ERROR] no .xlsx/.csv/.tsv weights files in $WEIGHTS_DIR" >&2; return 1; }
+  done
+  [[ -n "$out" ]] || { echo "[ERROR] no weights files (.xlsx/.csv/.tsv/.txt, optionally .gz) in $WEIGHTS_DIR" >&2; return 1; }
   printf '%s' "$out"
 }
 
