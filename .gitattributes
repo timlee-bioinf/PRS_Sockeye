@@ -1,0 +1,8 @@
+# Scripts run on Linux (the cluster): always check them out with LF line
+# endings, even on Windows, so a copied/pasted script never ends up with
+# "\r" (which breaks with: /usr/bin/env: 'bash\r': No such file or directory).
+*.sh      text eol=lf
+*.slurm   text eol=lf
+*.R       text eol=lf
+*.py      text eol=lf
+*.example text eol=lf

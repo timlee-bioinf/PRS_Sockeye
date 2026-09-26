@@ -79,7 +79,7 @@ outputs need to be writable:
 | `WEIGHTS_ROOT` | folder of trait folders, `<TRAIT>/<ANC>.tsv` | read | `<repo>/snp_input` |
 | `SNP_INPUT` | one weights file (single-ancestry mode) | read | `$WEIGHTS_ROOT/$TRAIT/EUR.tsv` |
 | `ANCESTRY_REF_PFILE` | reference panel `.pgen/.pvar/.psam`, no extension | read | `$DATA_ROOT/ancestry_ref/ref` |
-| `RUN_BASE` | per-run outputs | **write** | `<repo>/run_output/$TRAIT` |
+| `RUN_BASE` | per-run outputs (**must be writable from compute nodes** - on Sockeye, `/scratch`) | **write** | `<repo>/run_output/$TRAIT` |
 | `ANCESTRY_REF_CACHE` | setup cache (multi-ancestry) | **write** | `<repo>/ancestry_ref_cache` |
 
 Weights are organized one folder per trait, one file per ancestry:
@@ -109,8 +109,13 @@ WEIGHTS_ROOT/<TRAIT>/
 ```
 
 ```bash
-./submit.local.sh rsids   # submits slurm/resolve_pgs_rsids.slurm
+./submit.local.sh rsids        # submits slurm/resolve_pgs_rsids.slurm and waits
+./submit.local.sh rsids-copy   # only if the terminal closed before it finished
 ```
+
+The job writes to `$RUN_BASE/resolve_rsids/` (on `/scratch`, since compute
+nodes can't write to `/home`); once it finishes, `rsids` copies the results
+into the trait folder from the login node, so keep the terminal open.
 
 Each variant is looked up by GRCh38 chr + position + alleles in your imputed
 VCFs and takes that record's rsID. Anything not found (or found with ID `.`)

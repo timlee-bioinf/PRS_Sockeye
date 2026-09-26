@@ -46,8 +46,13 @@ PLINK2="${PLINK2:-plink2}"   # binary name on PATH, or an absolute path
 SCORE_MODE="${SCORE_MODE:-both}"   # both | weighted | unweighted
 R2_THRESH="${R2_THRESH:-0}"        # 0 = keep all; e.g. 0.8 to filter at scoring time
 
-# --- output (must be writable - defaults live inside this repo) ---
+# --- output (must be writable FROM COMPUTE NODES) ---
+# On Sockeye, /home and /arc/project are read-only on compute nodes - set
+# RUN_BASE to a /scratch path (e.g. /scratch/<alloc>/$USER/prs_runs/$TRAIT).
 RUN_BASE="${RUN_BASE:-$PROJECT_ROOT/run_output/$TRAIT}"
+# Staging folder for the one-time rsID conversion job (see
+# slurm/resolve_pgs_rsids.slurm); results are copied into WEIGHTS_DIR after.
+RESOLVE_WORK="${RESOLVE_WORK:-$RUN_BASE/resolve_rsids}"
 # Auto-prune SNP_extract_* run directories older than this many days on each
 # new submit.sh invocation. 0 disables pruning.
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
@@ -107,7 +112,7 @@ ancestry_map() {
 
 if [[ "${DEBUG_CONFIG:-0}" == "1" ]]; then
   for v in PROJECT_ROOT SBATCH_ACCOUNT MAIL_USER DATA_ROOT IMPUTE_DIR TRAIT WEIGHTS_ROOT WEIGHTS_DIR SNP_INPUT PLINK2 \
-           SCORE_MODE R2_THRESH RUN_BASE RETENTION_DAYS RUN_ANCESTRY ANCESTRY_REF_PFILE ANCESTRY_REF_LABEL_COL \
+           SCORE_MODE R2_THRESH RUN_BASE RESOLVE_WORK RETENTION_DAYS RUN_ANCESTRY ANCESTRY_REF_PFILE ANCESTRY_REF_LABEL_COL \
            ANCESTRY_REF_EXCLUDE ANCESTRY_REF_CACHE ANCESTRY_NORM_DIR ANCESTRY_N_PCS ANCESTRY_N_POPCOMP \
            ANCESTRY_N_NORM ANCESTRY_PVAL_THRESH; do
     echo "[CONFIG] $v=${!v}"

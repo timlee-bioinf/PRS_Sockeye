@@ -10,10 +10,14 @@
 # position-only weights files into rsID weights files the pipeline can use.
 #
 # Input : $WEIGHTS_DIR/pgs_raw/<ANC>.txt.gz   (e.g. PGS Catalog *_hmPOS_GRCh38 files)
-# Output: $WEIGHTS_DIR/<ANC>.tsv               rsID, effect_allele, other_allele,
-#                                              effect_weight, chr, pos
-#         $WEIGHTS_DIR/pgs_raw/<ANC>.unmatched.tsv  what was dropped, and why
-#         $WEIGHTS_DIR/pgs_raw/resolve.log
+# Output (all in $RESOLVE_WORK, which must be writable from compute nodes -
+# on Sockeye /home and /arc/project are read-only there, so it lives under
+# RUN_BASE on /scratch):
+#         <ANC>.tsv            rsID, effect_allele, other_allele, effect_weight, chr, pos
+#         <ANC>.unmatched.tsv  what was dropped, and why
+#         resolve.log
+# `./submit.local.sh rsids` waits for this job, then copies <ANC>.tsv into
+# $WEIGHTS_DIR and the logs into $WEIGHTS_DIR/pgs_raw from the login node.
 #
 # Each weights variant is looked up by GRCh38 chr + pos + alleles in the imputed
 # VCFs (IMPUTE_DIR) and gets that record's rsID. Variants absent from the
@@ -30,8 +34,11 @@ SUBMIT_DIR="${SUBMIT_DIR:?SUBMIT_DIR not exported}"
 module load gcc/9.4.0 r/4.4.0 2>/dev/null || true
 
 RAW_DIR="$WEIGHTS_DIR/pgs_raw"
-LOG="$RAW_DIR/resolve.log"; : > "$LOG"
-TMP="$RAW_DIR/.resolve_tmp_${SLURM_JOB_ID:-$$}"
+WORK="$RESOLVE_WORK"
+mkdir -p "$WORK"
+rm -f "$WORK"/*.tsv
+LOG="$WORK/resolve.log"; : > "$LOG"
+TMP="$WORK/tmp_${SLURM_JOB_ID:-$$}"
 mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 log() { echo "$*" | tee -a "$LOG"; }
@@ -81,8 +88,8 @@ for f in "${FILES[@]}"; do
   base="$(basename "$f")"; label="${base%.gz}"; label="${label%.*}"
   Rscript "$SUBMIT_DIR/scripts/resolve_pgs_rsids.R" join \
     --pgs "$f" --pvar "$TMP/imputed.pvar" \
-    --out "$WEIGHTS_DIR/${label}.tsv" \
-    --unmatched "$RAW_DIR/${label}.unmatched.tsv" 2>&1 | tee -a "$LOG"
+    --out "$WORK/${label}.tsv" \
+    --unmatched "$WORK/${label}.unmatched.tsv" 2>&1 | tee -a "$LOG"
 done
 
-log "=== DONE $(date -Is) - rsID weights files in $WEIGHTS_DIR ==="
+log "=== DONE $(date -Is) - rsID weights files in $WORK ==="

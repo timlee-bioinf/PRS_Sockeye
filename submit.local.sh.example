@@ -9,7 +9,11 @@
 #   ./submit.local.sh check    print the resolved config, submit nothing
 #   ./submit.local.sh rsids    one-time: convert position-only weights files in
 #                              $WEIGHTS_ROOT/$TRAIT/pgs_raw/ into rsID weights
-#                              files (SLURM job; see slurm/resolve_pgs_rsids.slurm)
+#                              files. Submits a SLURM job, WAITS for it (keep the
+#                              terminal open), then copies the results into
+#                              $WEIGHTS_ROOT/$TRAIT/. See slurm/resolve_pgs_rsids.slurm.
+#   ./submit.local.sh rsids-copy  redo just the copy step (e.g. if the terminal
+#                              closed while `rsids` was waiting)
 #
 # Anything left unset falls back to the default in config.sh.
 set -euo pipefail
@@ -31,8 +35,10 @@ export SNP_INPUT="$WEIGHTS_ROOT/$TRAIT/EUR.tsv"      # single-ancestry mode only
 export SCORE_MODE="both"                             # both | weighted | unweighted
 export R2_THRESH="0"
 
-# --- output (must be writable) ---
-# export RUN_BASE="$HERE/run_output/$TRAIT"
+# --- output (must be writable FROM COMPUTE NODES) ---
+# On Sockeye jobs can only write to /scratch (/home and /arc/project are
+# read-only on compute nodes), so every job's output goes under RUN_BASE.
+export RUN_BASE="/scratch/your-allocation/$USER/prs_runs/$TRAIT"
 
 # --- multi-ancestry ---
 export RUN_ANCESTRY="0"                              # 1 = ancestry inference + routed scoring
@@ -41,15 +47,38 @@ export ANCESTRY_REF_LABEL_COL="SuperPop"
 # export ANCESTRY_REF_EXCLUDE="/path/to/related.king.cutoff.out.id"
 # export ANCESTRY_REF_CACHE="$HERE/ancestry_ref_cache" # must be writable
 
+cfg() { bash -c "source '$HERE/config.sh'; echo \"\$$1\""; }   # resolved config value
+
+# Copy the rsID conversion results (written on /scratch) into the weights folder.
+rsids_copy() {
+  local work weights
+  work="$(cfg RESOLVE_WORK)"; weights="$(cfg WEIGHTS_DIR)"
+  ls "$work"/*.tsv >/dev/null 2>&1 || { echo "[ERROR] no results in $work - did the job finish? see $work/resolve.log"; exit 1; }
+  for f in "$work"/*.tsv; do
+    case "$f" in
+      *.unmatched.tsv) cp "$f" "$weights/pgs_raw/" ;;
+      *)               cp "$f" "$weights/" ;;
+    esac
+  done
+  cp "$work/resolve.log" "$weights/pgs_raw/"
+  echo "[DONE] rsID weights files copied to $weights:"
+  grep "matched" "$weights/pgs_raw/resolve.log" || true
+}
+
 case "${1:-submit}" in
   submit) exec bash "$HERE/submit.sh" ;;
   setup)  exec bash "$HERE/scripts/setup_ancestry_reference.sh" ;;
   check)  DEBUG_CONFIG=1 bash -c "source '$HERE/config.sh'" ;;
   rsids)
-    RAW="$(bash -c "source '$HERE/config.sh'; echo \"\$WEIGHTS_DIR\"")/pgs_raw"
+    RAW="$(cfg WEIGHTS_DIR)/pgs_raw"; WORK="$(cfg RESOLVE_WORK)"
     [[ -d "$RAW" ]] || { echo "[ERROR] put the raw weights files in $RAW first"; exit 1; }
-    sbatch --export=ALL,CONFIG="$HERE/config.sh",SUBMIT_DIR="$HERE" \
-      --output="$RAW/resolve_%j.out" --error="$RAW/resolve_%j.err" \
-      "$HERE/slurm/resolve_pgs_rsids.slurm" ;;
-  *) echo "usage: $0 [submit|setup|check|rsids]"; exit 1 ;;
+    mkdir -p "$WORK"
+    echo "[INFO] submitting; waiting for the job to finish (progress: tail -f $WORK/resolve.log)"
+    sbatch --wait --export=ALL,CONFIG="$HERE/config.sh",SUBMIT_DIR="$HERE" \
+      --output="$WORK/resolve_%j.out" --error="$WORK/resolve_%j.err" \
+      "$HERE/slurm/resolve_pgs_rsids.slurm" \
+      || { echo "[ERROR] job failed - see $WORK/resolve.log and $WORK/resolve_*.err"; exit 1; }
+    rsids_copy ;;
+  rsids-copy) rsids_copy ;;
+  *) echo "usage: $0 [submit|setup|check|rsids|rsids-copy]"; exit 1 ;;
 esac
