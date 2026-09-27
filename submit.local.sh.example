@@ -74,7 +74,8 @@ case "${1:-submit}" in
     [[ -d "$RAW" ]] || { echo "[ERROR] put the raw weights files in $RAW first"; exit 1; }
     mkdir -p "$WORK"
     echo "[INFO] submitting; waiting for the job to finish (progress: tail -f $WORK/resolve.log)"
-    sbatch --wait --export=ALL,CONFIG="$HERE/config.sh",SUBMIT_DIR="$HERE" \
+    # --chdir: Sockeye refuses jobs whose working directory is in /arc/project
+    sbatch --wait --chdir="$WORK" --export=ALL,CONFIG="$HERE/config.sh",SUBMIT_DIR="$HERE" \
       --output="$WORK/resolve_%j.out" --error="$WORK/resolve_%j.err" \
       "$HERE/slurm/resolve_pgs_rsids.slurm" \
       || { echo "[ERROR] job failed - see $WORK/resolve.log and $WORK/resolve_*.err"; exit 1; }
