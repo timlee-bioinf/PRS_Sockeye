@@ -42,9 +42,9 @@ export RUN_BASE="/scratch/your-allocation/$USER/prs_runs/$TRAIT"
 
 # --- multi-ancestry ---
 export RUN_ANCESTRY="0"                              # 1 = ancestry inference + routed scoring
-export ANCESTRY_REF_PFILE="/path/to/ancestry_ref/ref"   # no extension; read-only is fine
+export ANCESTRY_REF_PFILE="$HERE/reference/GRCh38_HGDP+1kGP_ALL"   # no extension; read-only is fine
 export ANCESTRY_REF_LABEL_COL="SuperPop"
-# export ANCESTRY_REF_EXCLUDE="/path/to/related.king.cutoff.out.id"
+export ANCESTRY_REF_EXCLUDE="$HERE/reference/GRCh38_HGDP+1kGP.king.cutoff.out.id"   # related samples to drop
 # export ANCESTRY_REF_CACHE="$HERE/ancestry_ref_cache" # must be writable
 
 cfg() { bash -c "source '$HERE/config.sh'; echo \"\$$1\""; }   # resolved config value

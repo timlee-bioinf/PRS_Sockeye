@@ -64,11 +64,11 @@ RETENTION_DAYS="${RETENTION_DAYS:-30}"
 # ancestry-normalized scores in step3.
 # See scripts/setup_ancestry_reference.sh for the required cache build (once per trait).
 RUN_ANCESTRY="${RUN_ANCESTRY:-0}"
-# Reference ancestry panel (e.g. your "g2k" data): PLINK2 pgen/pvar/psam, path
-# WITHOUT extension. Read-only. Must carry rsIDs in its .pvar (matched by rsID,
-# same as the rest of this pipeline - no build/liftover requirement as long as
-# both sides use rsIDs).
-ANCESTRY_REF_PFILE="${ANCESTRY_REF_PFILE:-$DATA_ROOT/ancestry_ref/ref}"
+# Reference ancestry panel: PLINK2 pgen/pvar(.zst)/psam, path WITHOUT extension.
+# Read-only. Default: pgsc_calc's HGDP+1kGP panel (GRCh38 files unpacked from
+# pgsc_HGDP+1kGP_v1.tar.zst) in <repo>/reference/ (git-ignored). Must carry
+# rsIDs in its .pvar (matched by rsID, same as the rest of this pipeline).
+ANCESTRY_REF_PFILE="${ANCESTRY_REF_PFILE:-$PROJECT_ROOT/reference/GRCh38_HGDP+1kGP_ALL}"
 # Column in the reference .psam holding each sample's population label.
 ANCESTRY_REF_LABEL_COL="${ANCESTRY_REF_LABEL_COL:-SuperPop}"
 # Optional: sample-ID file (one per line) of related/duplicate reference

@@ -23,6 +23,9 @@ pca/
 run_output/
 ancestry_ref_cache/
 
+# Reference ancestry panel (e.g. pgsc_calc's GRCh38_HGDP+1kGP_ALL, ~15 GB)
+reference/
+
 # PLINK output and temporary files
 *.log
 *.nosex

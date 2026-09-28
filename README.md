@@ -78,7 +78,7 @@ outputs need to be writable:
 | `IMPUTE_DIR` | folder with `chr_<N>/chr<N>.dose.vcf.gz` | read | `$DATA_ROOT/imputation` |
 | `WEIGHTS_ROOT` | folder of trait folders, `<TRAIT>/<ANC>.tsv` | read | `<repo>/snp_input` |
 | `SNP_INPUT` | one weights file (single-ancestry mode) | read | `$WEIGHTS_ROOT/$TRAIT/EUR.tsv` |
-| `ANCESTRY_REF_PFILE` | reference panel `.pgen/.pvar/.psam`, no extension | read | `$DATA_ROOT/ancestry_ref/ref` |
+| `ANCESTRY_REF_PFILE` | reference panel `.pgen/.pvar/.psam`, no extension | read | `<repo>/reference/GRCh38_HGDP+1kGP_ALL` |
 | `RUN_BASE` | per-run outputs (**must be writable from compute nodes** - on Sockeye, `/scratch`) | **write** | `<repo>/run_output/$TRAIT` |
 | `ANCESTRY_REF_CACHE` | setup cache (multi-ancestry) | **write** | `<repo>/ancestry_ref_cache` |
 
