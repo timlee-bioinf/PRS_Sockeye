@@ -14,6 +14,12 @@
 #                              $WEIGHTS_ROOT/$TRAIT/. See slurm/resolve_pgs_rsids.slurm.
 #   ./submit.local.sh rsids-copy  redo just the copy step (e.g. if the terminal
 #                              closed while `rsids` was waiting)
+#   ./submit.local.sh refids   one-time: give the reference panel (positional IDs,
+#                              e.g. pgsc_calc's HGDP+1kGP) rsIDs from INFO/gnomad_ID.
+#                              Submits a job, WAITS, then writes <panel>_rsid.pvar.zst
+#                              next to the panel. Then set ANCESTRY_REF_PFILE to
+#                              the _rsid prefix. See slurm/rsid_reference.slurm.
+#   ./submit.local.sh refids-copy redo just the copy step for `refids`
 #
 # Anything left unset falls back to the default in config.sh.
 set -euo pipefail
@@ -65,6 +71,21 @@ rsids_copy() {
   grep "matched" "$weights/pgs_raw/resolve.log" || true
 }
 
+# Install the reference-panel rsID .pvar.zst (written on /scratch) next to the
+# panel as <prefix>_rsid, linking the unchanged .pgen/.psam under that name.
+refids_copy() {
+  local work src dst
+  work="$(cfg REF_RSID_WORK)"; src="$(cfg ANCESTRY_REF_PFILE)"; src="${src%_rsid}"; dst="${src}_rsid"
+  [[ -f "$work/ref_rsid.pvar.zst" ]] || { echo "[ERROR] no result in $work - did the job finish? see $work/ref_rsid.log"; exit 1; }
+  cp "$work/ref_rsid.pvar.zst" "${dst}.pvar.zst"
+  ln -sf "$(basename "$src").pgen" "${dst}.pgen"
+  ln -sf "$(basename "$src").psam" "${dst}.psam"
+  cp "$work/ref_rsid.log" "${dst}.convert.log"
+  echo "[DONE] rsID reference panel: $dst  (.pvar.zst + links to the original .pgen/.psam)"
+  grep "variants get an rsID\|DONE" "${dst}.convert.log" || true
+  echo "Now set in submit.local.sh:  export ANCESTRY_REF_PFILE=\"$dst\""
+}
+
 case "${1:-submit}" in
   submit) exec bash "$HERE/submit.sh" ;;
   setup)  exec bash "$HERE/scripts/setup_ancestry_reference.sh" ;;
@@ -81,5 +102,17 @@ case "${1:-submit}" in
       || { echo "[ERROR] job failed - see $WORK/resolve.log and $WORK/resolve_*.err"; exit 1; }
     rsids_copy ;;
   rsids-copy) rsids_copy ;;
-  *) echo "usage: $0 [submit|setup|check|rsids|rsids-copy]"; exit 1 ;;
+  refids)
+    SRC="$(cfg ANCESTRY_REF_PFILE)"; WORK="$(cfg REF_RSID_WORK)"
+    [[ "$SRC" != *_rsid ]] || { echo "[ERROR] ANCESTRY_REF_PFILE already points at an _rsid panel ($SRC) - set it back to the original to rebuild"; exit 1; }
+    [[ -f "${SRC}.pgen" ]] || { echo "[ERROR] reference panel not found: ${SRC}.pgen"; exit 1; }
+    mkdir -p "$WORK"
+    echo "[INFO] submitting; waiting for the job to finish (progress: tail -f $WORK/ref_rsid.log)"
+    sbatch --wait --chdir="$WORK" --export=ALL,CONFIG="$HERE/config.sh" \
+      --output="$WORK/ref_rsid_%j.out" --error="$WORK/ref_rsid_%j.err" \
+      "$HERE/slurm/rsid_reference.slurm" \
+      || { echo "[ERROR] job failed - see $WORK/ref_rsid.log and $WORK/ref_rsid_*.err"; exit 1; }
+    refids_copy ;;
+  refids-copy) refids_copy ;;
+  *) echo "usage: $0 [submit|setup|check|rsids|rsids-copy|refids|refids-copy]"; exit 1 ;;
 esac

@@ -242,6 +242,21 @@ per-ancestry weights file in `WEIGHTS_DIR` and adds one pipeline step:
          normalization)
 ```
 
+### Reference panel without rsIDs (e.g. pgsc_calc's HGDP+1kGP)
+
+pgsc_calc's reference panels use positional variant IDs (`1:10410:CCCTAA:C`)
+and keep the rsID in INFO as `gnomad_ID=rs...`. Give the panel rsIDs once:
+
+```bash
+./submit.local.sh refids    # submits slurm/rsid_reference.slurm and waits
+```
+
+This writes `<panel>_rsid.pvar.zst` next to the panel (ID = the gnomad rsID
+where present, else the original positional ID; each rsID used once, preferring
+the SNV record) and links the unchanged `.pgen`/`.psam` under the `_rsid` name.
+Then point `ANCESTRY_REF_PFILE` at the `_rsid` prefix. The summary
+(`<panel>_rsid.convert.log`) reports how many variants got an rsID.
+
 ### Setup (not part of the per-run DAG)
 
 1. A reference ancestry panel in **PLINK2 pgen/pvar/psam** format, with rsIDs

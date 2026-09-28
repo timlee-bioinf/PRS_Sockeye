@@ -53,6 +53,9 @@ RUN_BASE="${RUN_BASE:-$PROJECT_ROOT/run_output/$TRAIT}"
 # Staging folder for the one-time rsID conversion job (see
 # slurm/resolve_pgs_rsids.slurm); results are copied into WEIGHTS_DIR after.
 RESOLVE_WORK="${RESOLVE_WORK:-$RUN_BASE/resolve_rsids}"
+# Staging folder for the one-time reference-panel rsID job (see
+# slurm/rsid_reference.slurm); the result is copied next to the panel after.
+REF_RSID_WORK="${REF_RSID_WORK:-$RUN_BASE/ref_rsid}"
 # Auto-prune SNP_extract_* run directories older than this many days on each
 # new submit.sh invocation. 0 disables pruning.
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
@@ -112,7 +115,7 @@ ancestry_map() {
 
 if [[ "${DEBUG_CONFIG:-0}" == "1" ]]; then
   for v in PROJECT_ROOT SBATCH_ACCOUNT MAIL_USER DATA_ROOT IMPUTE_DIR TRAIT WEIGHTS_ROOT WEIGHTS_DIR SNP_INPUT PLINK2 \
-           SCORE_MODE R2_THRESH RUN_BASE RESOLVE_WORK RETENTION_DAYS RUN_ANCESTRY ANCESTRY_REF_PFILE ANCESTRY_REF_LABEL_COL \
+           SCORE_MODE R2_THRESH RUN_BASE RESOLVE_WORK REF_RSID_WORK RETENTION_DAYS RUN_ANCESTRY ANCESTRY_REF_PFILE ANCESTRY_REF_LABEL_COL \
            ANCESTRY_REF_EXCLUDE ANCESTRY_REF_CACHE ANCESTRY_NORM_DIR ANCESTRY_N_PCS ANCESTRY_N_POPCOMP \
            ANCESTRY_N_NORM ANCESTRY_PVAL_THRESH; do
     echo "[CONFIG] $v=${!v}"
