@@ -49,15 +49,28 @@ fi
 # no-mean-imputation: small cohort (<50) blocks PLINK's auto allele-frequency
 # imputation; imputed dosages have ~no missingness, so score observed alleles only.
 # keep (4th arg, optional): --keep file restricting to one ancestry's samples.
+# only (5th arg, optional): SNP list to restrict to (the weights SNPs found in
+# the reference panel), combined with the R2 filter if one is set.
 run_score() {
-  local sfile="$1" out="$2" label="$3" keep="${4:-}"
+  local sfile="$1" out="$2" label="$3" keep="${4:-}" only="${5:-}"
   [[ -f "$sfile" ]] || { echo "[ERROR] missing score file: $sfile"; exit 1; }
   local KEEP_OPT=()
   [[ -n "$keep" ]] && KEEP_OPT=(--keep "$keep")
+  local EXT=("${EXTRACT_OPT[@]+"${EXTRACT_OPT[@]}"}")
+  if [[ -n "$only" ]]; then
+    [[ -f "$only" ]] || { echo "[ERROR] missing $only - re-run ./submit.local.sh setup"; exit 1; }
+    if [[ ${#EXT[@]} -gt 0 ]]; then
+      grep -Fxf "$only" "$KEEP" > "${out}.snps" || true    # R2 filter AND in reference
+    else
+      cp "$only" "${out}.snps"
+    fi
+    EXT=(--extract "${out}.snps")
+    echo "[INFO] $label: scoring $(wc -l < "${out}.snps") SNPs (found in reference$([[ -n "${KEEP:-}" ]] && echo " and R2>=$R2_THRESH"))" | tee -a "$STEP_LOG"
+  fi
   echo "[INFO] scoring: $label" | tee -a "$STEP_LOG"
   "$PLINK2" \
     --pfile "$PFILE" \
-    "${EXTRACT_OPT[@]+"${EXTRACT_OPT[@]}"}" \
+    "${EXT[@]+"${EXT[@]}"}" \
     "${KEEP_OPT[@]+"${KEEP_OPT[@]}"}" \
     --score "$sfile" 1 2 3 header cols=+scoresums no-mean-imputation \
     --out "$out" >> "$STEP_LOG" 2>&1
@@ -86,8 +99,9 @@ if [[ "$RUN_ANCESTRY" == "1" ]]; then
     fi
     ANC_INPUTS="$INPUTS/ancestry/$ANC"
     ANC_OUT="$TASK3_OUT/$ANC"; mkdir -p "$ANC_OUT"
-    [[ "$DO_U" -eq 1 ]] && run_score "$ANC_INPUTS/copa_unweighted_score.tsv" "$ANC_OUT/grs_unweighted" "unweighted/$ANC" "$KEEP_FILE"
-    [[ "$DO_W" -eq 1 ]] && run_score "$ANC_INPUTS/copa_weighted_score.tsv"   "$ANC_OUT/grs_weighted"   "weighted/$ANC"   "$KEEP_FILE"
+    REF_VARS="$ANCESTRY_NORM_DIR/$ANC/ref_score"
+    [[ "$DO_U" -eq 1 ]] && run_score "$ANC_INPUTS/copa_unweighted_score.tsv" "$ANC_OUT/grs_unweighted" "unweighted/$ANC" "$KEEP_FILE" "${REF_VARS}_unweighted.sscore.vars"
+    [[ "$DO_W" -eq 1 ]] && run_score "$ANC_INPUTS/copa_weighted_score.tsv"   "$ANC_OUT/grs_weighted"   "weighted/$ANC"   "$KEEP_FILE" "${REF_VARS}_weighted.sscore.vars"
   done <<< "$ANC_MAP"
 
   module load gcc/9.4.0 r/4.4.0 2>/dev/null || true

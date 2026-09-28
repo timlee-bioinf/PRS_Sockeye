@@ -115,8 +115,11 @@ while IFS=$'\t' read -r ANC SNP_IN; do
     [[ -f "$SFILE" ]] || { echo "[ERROR] missing $SFILE"; exit 1; }
     "$PLINK2" "${REF_PFILE_OPT[@]}" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
       --extract "$OUTDIR/snp_list.txt" \
-      --score "$SFILE" 1 2 3 header cols=+scoresums no-mean-imputation \
+      --score "$SFILE" 1 2 3 header cols=+scoresums no-mean-imputation list-variants \
       --out "$OUTDIR/ref_score_${MODE}" >> "$LOG" 2>&1
+    # list-variants -> ref_score_<mode>.sscore.vars: the weights SNPs actually
+    # found in the reference. step3 scores COPA on only these, so both sides match.
+    log "  [$ANC/$MODE] $(wc -l < "$OUTDIR/ref_score_${MODE}.sscore.vars") / $(wc -l < "$OUTDIR/snp_list.txt") weights SNPs found in the reference"
     Rscript "$SUBMIT_DIR/scripts/build_ancestry_norm_models.R" \
       --sscore "$OUTDIR/ref_score_${MODE}.sscore" \
       --eigenvec "$ANCESTRY_REF_CACHE/ref_pca.eigenvec" \
