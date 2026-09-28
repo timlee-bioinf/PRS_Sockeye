@@ -27,6 +27,9 @@ source "$CONFIG"
 ANC_MAP="$(ancestry_map)" || exit 1
 [[ -f "${ANCESTRY_REF_PFILE}.pvar" || -f "${ANCESTRY_REF_PFILE}.pvar.zst" ]] || {
   echo "[ERROR] reference panel not found: ${ANCESTRY_REF_PFILE}.pvar[.zst]"; exit 1; }
+# vzs: plink2 only reads a .pvar.zst when told to
+REF_PFILE_OPT=(--pfile "$ANCESTRY_REF_PFILE")
+[[ -f "${ANCESTRY_REF_PFILE}.pvar" ]] || REF_PFILE_OPT+=(vzs)
 command -v "$PLINK2" >/dev/null 2>&1 || [[ -x "$PLINK2" ]] || { echo "[ERROR] PLINK2 not found: $PLINK2"; exit 1; }
 
 module load gcc/9.4.0 r/4.4.0 2>/dev/null || true
@@ -52,7 +55,7 @@ if [[ "$SHARED_DONE" -eq 1 && "${REBUILD_REF:-0}" != "1" ]]; then
 log "=== [1-3/4] shared reference PCA/classifier already cached in $ANCESTRY_REF_CACHE - skipping (REBUILD_REF=1 to redo) ==="
 else
 log "=== [1/4] LD-pruning reference panel $(date -Is) ==="
-"$PLINK2" --pfile "$ANCESTRY_REF_PFILE" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
+"$PLINK2" "${REF_PFILE_OPT[@]}" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
   --autosome --maf 0.05 --geno 0.05 \
   --indep-pairwise 200 50 0.1 \
   --out "$ANCESTRY_REF_CACHE/prune" >> "$LOG" 2>&1
@@ -64,7 +67,7 @@ log "=== [2/4] Computing reference PCA ($ANCESTRY_N_PCS PCs) $(date -Is) ==="
 # --read-freq and variance-standardize target genotypes against the SAME
 # frequencies the PCA basis was built on, instead of re-estimating them from
 # whatever (possibly small) cohort is being scored that run.
-"$PLINK2" --pfile "$ANCESTRY_REF_PFILE" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
+"$PLINK2" "${REF_PFILE_OPT[@]}" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
   --extract "$ANCESTRY_REF_CACHE/prune.prune.in" \
   --pca allele-wts "$ANCESTRY_N_PCS" \
   --freq \
@@ -102,7 +105,7 @@ while IFS=$'\t' read -r ANC SNP_IN; do
   for MODE in "${MODES[@]}"; do
     SFILE="$OUTDIR/copa_${MODE}_score.tsv"
     [[ -f "$SFILE" ]] || { echo "[ERROR] missing $SFILE"; exit 1; }
-    "$PLINK2" --pfile "$ANCESTRY_REF_PFILE" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
+    "$PLINK2" "${REF_PFILE_OPT[@]}" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
       --extract "$OUTDIR/snp_list.txt" \
       --score "$SFILE" 1 2 3 header cols=+scoresums no-mean-imputation \
       --out "$OUTDIR/ref_score_${MODE}" >> "$LOG" 2>&1

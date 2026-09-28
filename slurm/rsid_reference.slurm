@@ -74,7 +74,9 @@ N_RENAME=$(wc -l < "$TMP/rename.tsv")
 log "  $N_RENAME variants get an rsID ($((N_CAND - N_RENAME)) duplicate-rsID records keep positional IDs)"
 
 log "=== [3/3] writing the rsID .pvar.zst $(date -Is) ==="
-"$PLINK2" --pfile "$REF" \
+# vzs: plink2 only reads a .pvar.zst when told to
+PFILE_OPT=(--pfile "$REF"); [[ "$PVAR" == *.zst ]] && PFILE_OPT+=(vzs)
+"$PLINK2" "${PFILE_OPT[@]}" \
   --update-name "$TMP/rename.tsv" 2 1 \
   --make-just-pvar zs \
   --threads "${SLURM_CPUS_PER_TASK:-1}" \
