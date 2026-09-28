@@ -55,7 +55,15 @@ if [[ "$SHARED_DONE" -eq 1 && "${REBUILD_REF:-0}" != "1" ]]; then
 log "=== [1-3/4] shared reference PCA/classifier already cached in $ANCESTRY_REF_CACHE - skipping (REBUILD_REF=1 to redo) ==="
 else
 log "=== [1/4] LD-pruning reference panel $(date -Is) ==="
+# Only rsID markers can be found in the (rsID-matched) target data, so build
+# the PCA from those alone - markers the target lacks would distort projection.
+if [[ -f "${ANCESTRY_REF_PFILE}.pvar" ]]; then cat "${ANCESTRY_REF_PFILE}.pvar"
+else "$PLINK2" --zst-decompress "${ANCESTRY_REF_PFILE}.pvar.zst"; fi \
+  | awk -F'\t' '/^##/ { next } /^#CHROM/ { for (i = 1; i <= NF; i++) if ($i == "ID") id = i; next } $id ~ /^rs[0-9]+$/ { print $id }' \
+  > "$ANCESTRY_REF_CACHE/ref_rsid_markers.txt"
+log "  $(wc -l < "$ANCESTRY_REF_CACHE/ref_rsid_markers.txt") reference variants with rsIDs (PCA candidates)"
 "$PLINK2" "${REF_PFILE_OPT[@]}" "${PLINK_EXCLUDE_OPT[@]+"${PLINK_EXCLUDE_OPT[@]}"}" \
+  --extract "$ANCESTRY_REF_CACHE/ref_rsid_markers.txt" \
   --autosome --maf 0.05 --geno 0.05 \
   --indep-pairwise 200 50 0.1 \
   --out "$ANCESTRY_REF_CACHE/prune" >> "$LOG" 2>&1
